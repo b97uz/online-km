@@ -1,0 +1,2 @@
+ALTER TABLE "AccessWindow"
+  ADD COLUMN IF NOT EXISTS "submittedAt" TIMESTAMP(3);

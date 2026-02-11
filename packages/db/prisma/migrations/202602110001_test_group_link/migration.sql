@@ -1,0 +1,5 @@
+ALTER TABLE "Test"
+  ADD COLUMN IF NOT EXISTS "telegramGroupLink" TEXT;
+
+ALTER TABLE "AccessWindow"
+  ADD COLUMN IF NOT EXISTS "openedAt" TIMESTAMP(3);

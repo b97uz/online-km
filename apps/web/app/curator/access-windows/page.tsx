@@ -31,7 +31,11 @@ export default async function CuratorAccessWindowsPage({
       where: { curatorId: session.userId },
       include: {
         enrollments: {
-          where: { status: "ACTIVE" },
+          where: {
+            status: {
+              in: ["TRIAL", "ACTIVE"],
+            },
+          },
           include: {
             student: {
               select: {

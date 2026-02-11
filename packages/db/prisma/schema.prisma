@@ -298,6 +298,7 @@ model Lesson {
 model Test {
   id             String   @id @default(cuid())
   lessonId        String
+  telegramGroupLink String?
   answerKey       Json
   totalQuestions  Int
   isActive        Boolean  @default(true)
@@ -328,6 +329,8 @@ model AccessWindow {
   testId     String
   openFrom   DateTime
   openTo     DateTime
+  openedAt   DateTime?
+  submittedAt DateTime?
   createdBy  String
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())

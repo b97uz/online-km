@@ -39,7 +39,9 @@ export async function POST(req: Request) {
       status: "ACTIVE",
       enrollments: {
         some: {
-          status: "ACTIVE",
+          status: {
+            in: ["TRIAL", "ACTIVE"],
+          },
           group: {
             curatorId: session.userId,
             status: { not: "YOPIQ" },
@@ -117,7 +119,7 @@ export async function POST(req: Request) {
     studentUserId = oldStudent?.id ?? null;
   }
 
-  if (!studentUserId) return redirectBack(req, "Talaba sizning aktiv guruhingizda topilmadi", true);
+  if (!studentUserId) return redirectBack(req, "Talaba sizning aktiv/sinov guruhingizda topilmadi", true);
 
   const test = await prisma.test.findFirst({
     where: { id: testId, isActive: true },

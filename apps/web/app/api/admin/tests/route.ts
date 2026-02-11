@@ -73,6 +73,7 @@ export async function POST(req: Request) {
           lessonId: lesson.id,
           totalQuestions,
           answerKey,
+          telegramGroupLink: null,
         },
       });
 

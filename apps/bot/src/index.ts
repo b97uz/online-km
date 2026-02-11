@@ -13,6 +13,8 @@ type SessionState = {
   awaitingPhone: boolean;
   awaitingAppeal: boolean;
   activeTestId?: string;
+  activeWindowId?: string;
+  activeGroupLink?: string | null;
   sentTestMessageIds: number[];
 };
 
@@ -67,6 +69,9 @@ const PARENT_BTN_APPEAL = "✍️ E'tiroz bildirish";
 const REJECT_TEXT = "Siz bizning onlayn kurslarimizda o'qimaysiz. Batafsil @ceo97 administratorimizdan so'rang.";
 
 const state = new Map<number, SessionState>();
+const pendingGroupLeaveTimers = new Map<string, NodeJS.Timeout>();
+const pendingJoinByUser = new Map<number, { windowId: string; expiresAt: number }>();
+const windowChatTargets = new Map<string, string | number>();
 
 const botToken = process.env.BOT_TOKEN;
 const webBaseUrl = process.env.WEB_BASE_URL;
@@ -121,6 +126,8 @@ function getSessionState(fromId: number): SessionState {
   const initial: SessionState = {
     awaitingPhone: true,
     awaitingAppeal: false,
+    activeWindowId: undefined,
+    activeGroupLink: undefined,
     sentTestMessageIds: [],
   };
   state.set(fromId, initial);
@@ -198,16 +205,174 @@ function resolveLocalImagePath(imageUrl: string) {
 }
 
 async function sendTestImage(
-  ctx: { replyWithPhoto: (photo: string | InputFile) => Promise<unknown> },
+  ctx: { replyWithPhoto: (photo: string | InputFile, other?: Record<string, unknown>) => Promise<unknown> },
   imageUrl: string,
 ): Promise<number | null> {
   const localPath = resolveLocalImagePath(imageUrl);
   const sent = localPath
-    ? await ctx.replyWithPhoto(new InputFile(localPath))
-    : await ctx.replyWithPhoto(resolveImageUrl(imageUrl));
+    ? await ctx.replyWithPhoto(new InputFile(localPath), { protect_content: true })
+    : await ctx.replyWithPhoto(resolveImageUrl(imageUrl), { protect_content: true });
 
   const maybeMessage = sent as { message_id?: number };
   return typeof maybeMessage.message_id === "number" ? maybeMessage.message_id : null;
+}
+
+function normalizeTelegramGroupLink(raw: string): string {
+  const value = raw.trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith("t.me/") || value.startsWith("telegram.me/")) return `https://${value}`;
+  if (value.startsWith("@")) return `https://t.me/${value.slice(1)}`;
+  return value;
+}
+
+function extractChatIdFromGroupLink(link: string): string | number | null {
+  const normalized = normalizeTelegramGroupLink(link);
+  if (!normalized) return null;
+
+  try {
+    const url = new URL(normalized);
+    const path = url.pathname.replace(/^\/+/, "");
+    if (!path) return null;
+
+    const firstSegment = path.split("/")[0] ?? "";
+    if (!firstSegment || firstSegment.startsWith("+") || firstSegment === "joinchat") return null;
+
+    return `@${firstSegment}`;
+  } catch {
+    return null;
+  }
+}
+
+function isPrivateInviteLink(link: string): boolean {
+  const normalized = normalizeTelegramGroupLink(link);
+  return /^https?:\/\/(t\.me|telegram\.me)\/(\+|joinchat\/)[a-zA-Z0-9_-]{8,}$/i.test(normalized);
+}
+
+async function createSingleUseInviteLink(groupLink: string, windowId: string): Promise<{
+  inviteLink: string;
+  chatId: string | number;
+} | null> {
+  const chatId = extractChatIdFromGroupLink(groupLink);
+  if (!chatId) return null;
+
+  const expireAtUnix = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
+  const invite = await bot.api.createChatInviteLink(chatId, {
+    name: `test-${windowId.slice(0, 8)}`,
+    member_limit: 1,
+    expire_date: expireAtUnix,
+  });
+
+  return {
+    inviteLink: invite.invite_link,
+    chatId,
+  };
+}
+
+async function kickStudentFromGroupByLink(groupLink: string, telegramUserId: number): Promise<boolean> {
+  const chatId = extractChatIdFromGroupLink(groupLink);
+  if (!chatId) return false;
+  return kickStudentFromChat(chatId, telegramUserId);
+}
+
+async function kickStudentFromChat(chatId: string | number, telegramUserId: number): Promise<boolean> {
+  try {
+    await bot.api.banChatMember(chatId, telegramUserId, { revoke_messages: false });
+    await bot.api.unbanChatMember(chatId, telegramUserId, { only_if_banned: true });
+    return true;
+  } catch (error) {
+    console.error("GROUP_KICK_ERROR", { chatId, telegramUserId, error });
+    return false;
+  }
+}
+
+async function kickStudentFromTestGroup(
+  windowId: string | undefined,
+  groupLink: string,
+  telegramUserId: number,
+): Promise<boolean> {
+  const target = windowId ? windowChatTargets.get(windowId) : undefined;
+  if (target !== undefined) {
+    return kickStudentFromChat(target, telegramUserId);
+  }
+
+  return kickStudentFromGroupByLink(groupLink, telegramUserId);
+}
+
+function registerPendingJoin(userTelegramId: number, windowId: string, delayMs: number) {
+  pendingJoinByUser.set(userTelegramId, {
+    windowId,
+    expiresAt: Date.now() + delayMs,
+  });
+}
+
+function clearPendingJoin(userTelegramId: number, windowId?: string) {
+  const pending = pendingJoinByUser.get(userTelegramId);
+  if (!pending) return;
+  if (windowId && pending.windowId !== windowId) return;
+  pendingJoinByUser.delete(userTelegramId);
+}
+
+function clearWindowChatTarget(windowId?: string) {
+  if (!windowId) return;
+  windowChatTargets.delete(windowId);
+}
+
+function clearPendingGroupAccess(userTelegramId: number, windowId?: string) {
+  clearPendingJoin(userTelegramId, windowId);
+  if (windowId) {
+    clearPendingGroupLeave(windowId);
+    clearWindowChatTarget(windowId);
+  }
+}
+
+function scheduleGroupLeave(windowId: string, groupLink: string, telegramUserId: number, delayMs: number) {
+  clearPendingGroupLeave(windowId);
+  const timer = setTimeout(async () => {
+    try {
+      await kickStudentFromTestGroup(windowId, groupLink, telegramUserId);
+    } finally {
+      pendingGroupLeaveTimers.delete(windowId);
+      pendingJoinByUser.delete(telegramUserId);
+      windowChatTargets.delete(windowId);
+    }
+  }, delayMs);
+  pendingGroupLeaveTimers.set(windowId, timer);
+}
+
+function isJoinedChatMemberStatus(status: string): boolean {
+  return status === "member" || status === "administrator" || status === "creator" || status === "restricted";
+}
+
+function handlePotentialGroupJoin(chatId: number, userTelegramId: number, status: string) {
+  if (!isJoinedChatMemberStatus(status)) return;
+
+  const pending = pendingJoinByUser.get(userTelegramId);
+  if (!pending) return;
+  if (pending.expiresAt < Date.now()) {
+    pendingJoinByUser.delete(userTelegramId);
+    return;
+  }
+
+  windowChatTargets.set(pending.windowId, chatId);
+  pendingJoinByUser.delete(userTelegramId);
+  scheduleGroupLeave(pending.windowId, "", userTelegramId, 2 * 60 * 60 * 1000);
+}
+
+async function removeStudentFromTestGroup(
+  windowId: string | undefined,
+  groupLink: string | null | undefined,
+  telegramUserId: number,
+): Promise<boolean> {
+  if (!groupLink) return false;
+  return kickStudentFromTestGroup(windowId, groupLink, telegramUserId);
+}
+
+function clearPendingGroupLeave(windowId: string) {
+  const timer = pendingGroupLeaveTimers.get(windowId);
+  if (!timer) return;
+  clearTimeout(timer);
+  pendingGroupLeaveTimers.delete(windowId);
 }
 
 async function ensureStudentUserForBot(student: {
@@ -762,9 +927,12 @@ bot.command("start", async (ctx) => {
   const session = getSessionState(ctx.from.id);
 
   if (!actor) {
+    clearPendingGroupAccess(ctx.from.id, session.activeWindowId);
     session.awaitingPhone = true;
     session.awaitingAppeal = false;
     session.activeTestId = undefined;
+    session.activeWindowId = undefined;
+    session.activeGroupLink = undefined;
     session.sentTestMessageIds = [];
     state.set(ctx.from.id, session);
 
@@ -775,8 +943,13 @@ bot.command("start", async (ctx) => {
     return;
   }
 
+  clearPendingGroupAccess(ctx.from.id, session.activeWindowId);
   session.awaitingPhone = false;
   session.awaitingAppeal = false;
+  session.activeTestId = undefined;
+  session.activeWindowId = undefined;
+  session.activeGroupLink = undefined;
+  session.sentTestMessageIds = [];
   state.set(ctx.from.id, session);
 
   if (actor.type === "STUDENT") {
@@ -789,6 +962,12 @@ bot.command("start", async (ctx) => {
 
 bot.command("ping", async (ctx) => {
   await ctx.reply("Bot ishlayapti ✅");
+});
+
+bot.on("chat_member", async (ctx) => {
+  const payload = ctx.update.chat_member;
+  if (!payload) return;
+  handlePotentialGroupJoin(payload.chat.id, payload.new_chat_member.user.id, payload.new_chat_member.status);
 });
 
 bot.on("message:contact", async (ctx) => {
@@ -819,7 +998,10 @@ bot.on("message:contact", async (ctx) => {
 
       session.awaitingPhone = false;
       session.awaitingAppeal = false;
+      clearPendingGroupAccess(ctx.from.id, session.activeWindowId);
       session.activeTestId = undefined;
+      session.activeWindowId = undefined;
+      session.activeGroupLink = undefined;
       session.sentTestMessageIds = [];
       state.set(ctx.from.id, session);
 
@@ -879,7 +1061,10 @@ bot.on("message:contact", async (ctx) => {
 
     session.awaitingPhone = false;
     session.awaitingAppeal = false;
+    clearPendingGroupAccess(ctx.from.id, session.activeWindowId);
     session.activeTestId = undefined;
+    session.activeWindowId = undefined;
+    session.activeGroupLink = undefined;
     session.sentTestMessageIds = [];
     state.set(ctx.from.id, session);
 
@@ -907,8 +1092,13 @@ bot.on("message:text", async (ctx) => {
   const actor = await resolveActorByTelegramUserId(ctx.from.id);
 
   if (!actor) {
+    clearPendingGroupAccess(ctx.from.id, session.activeWindowId);
     session.awaitingPhone = true;
     session.awaitingAppeal = false;
+    session.activeTestId = undefined;
+    session.activeWindowId = undefined;
+    session.activeGroupLink = undefined;
+    session.sentTestMessageIds = [];
     state.set(ctx.from.id, session);
     await ctx.reply("Telefon raqamni qo'lda yozmang. Pastdagi tugma orqali yuboring.", {
       reply_markup: phoneKeyboard,
@@ -966,12 +1156,22 @@ bot.on("message:text", async (ctx) => {
       }
 
       session.activeTestId = activeWindow.testId;
+      session.activeWindowId = activeWindow.id;
       session.sentTestMessageIds = [];
       state.set(ctx.from.id, session);
+
+      if (activeWindow.openedAt) {
+        await ctx.reply(
+          `Sizga test allaqachon yuborilgan.\nJavoblarni shu botga yuboring. Namuna: 1A2B3C...${activeWindow.test.totalQuestions}B`,
+          { reply_markup: studentMenuKeyboard, protect_content: true },
+        );
+        return;
+      }
 
       await ctx.reply(
         `Sizga ochiq test: ${activeWindow.test.lesson.book.title} | ${activeWindow.test.lesson.lessonNumber}-dars`,
         {
+          protect_content: true,
           reply_markup: {
             inline_keyboard: [[{ text: "📝 Testni ochish", callback_data: `open_test:${activeWindow.testId}` }]],
           },
@@ -981,17 +1181,41 @@ bot.on("message:text", async (ctx) => {
     }
 
     if (session.activeTestId) {
-      const test = await prisma.test.findUnique({
-        where: { id: session.activeTestId },
-        include: { lesson: true },
-      });
+      const now = new Date();
+      const activeWindow = session.activeWindowId
+        ? await prisma.accessWindow.findFirst({
+            where: {
+              id: session.activeWindowId,
+              studentId: actor.userId,
+              testId: session.activeTestId,
+              isActive: true,
+              submittedAt: null,
+              openFrom: { lte: now },
+              openTo: { gte: now },
+            },
+            include: {
+              test: {
+                select: {
+                  id: true,
+                  totalQuestions: true,
+                  answerKey: true,
+                },
+              },
+            },
+          })
+        : null;
 
-      if (!test) {
+      if (!activeWindow) {
+        clearPendingGroupAccess(ctx.from.id, session.activeWindowId);
         session.activeTestId = undefined;
+        session.activeWindowId = undefined;
+        session.sentTestMessageIds = [];
         state.set(ctx.from.id, session);
-        await ctx.reply("Test topilmadi.", { reply_markup: studentMenuKeyboard });
+        await ctx.reply("Sizda aktiv test yo'q.", { reply_markup: studentMenuKeyboard });
         return;
       }
+
+      const test = activeWindow.test;
 
       try {
         const parsed = parseAnswerText(text, test.totalQuestions);
@@ -1035,6 +1259,26 @@ bot.on("message:text", async (ctx) => {
         }
 
         await prisma.$transaction(async (tx) => {
+          const submittedAt = new Date();
+          const lockWindow = await tx.accessWindow.updateMany({
+            where: {
+              id: activeWindow.id,
+              studentId: actor.userId,
+              testId: test.id,
+              isActive: true,
+              submittedAt: null,
+            },
+            data: {
+              submittedAt,
+              isActive: false,
+              openTo: submittedAt,
+            },
+          });
+
+          if (lockWindow.count === 0) {
+            throw new Error("WINDOW_ALREADY_SUBMITTED");
+          }
+
           const submission = await tx.submission.create({
             data: {
               studentId: actor.userId,
@@ -1069,13 +1313,25 @@ bot.on("message:text", async (ctx) => {
           }
         }
 
+        clearPendingGroupAccess(ctx.from.id, session.activeWindowId);
         session.activeTestId = undefined;
+        session.activeWindowId = undefined;
         session.sentTestMessageIds = [];
         state.set(ctx.from.id, session);
 
         await ctx.reply("Qabul qilindi ✅", { reply_markup: studentMenuKeyboard });
         return;
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && error.message === "WINDOW_ALREADY_SUBMITTED") {
+          clearPendingGroupAccess(ctx.from.id, session.activeWindowId);
+          session.activeTestId = undefined;
+          session.activeWindowId = undefined;
+          session.sentTestMessageIds = [];
+          state.set(ctx.from.id, session);
+          await ctx.reply("Sizda aktiv test yo'q.", { reply_markup: studentMenuKeyboard });
+          return;
+        }
+
         await ctx.reply(`Format xato. Namuna: 1A2B3C...${test.totalQuestions}B`, {
           reply_markup: studentMenuKeyboard,
         });
@@ -1148,30 +1404,75 @@ bot.callbackQuery(/open_test:(.+)/, async (ctx) => {
   }
 
   const session = getSessionState(ctx.from.id);
-  session.activeTestId = testId;
-  session.sentTestMessageIds = [];
-
-  for (const image of activeWindow.test.images) {
-    try {
-      const messageId = await sendTestImage(ctx, image.imageUrl);
-      if (messageId) session.sentTestMessageIds.push(messageId);
-    } catch (error) {
-      console.error("SEND_IMAGE_ERROR", { imageUrl: image.imageUrl, error });
-      await ctx.reply("Test rasmini yuborishda xatolik bo'ldi. Kuratorga murojaat qiling.", {
-        reply_markup: studentMenuKeyboard,
-      });
-      await ctx.answerCallbackQuery();
-      return;
-    }
+  if (activeWindow.openedAt) {
+    session.activeTestId = testId;
+    session.activeWindowId = activeWindow.id;
+    state.set(ctx.from.id, session);
+    await ctx.answerCallbackQuery({
+      text: "Test allaqachon ochilgan. Javoblarni yuboring.",
+      show_alert: true,
+    });
+    return;
   }
 
-  const instruction = await ctx.reply(
-    `Javoblarni bitta qatorda yuboring. Masalan: 1A2B3C...${activeWindow.test.totalQuestions}B`,
-    { reply_markup: studentMenuKeyboard },
-  );
+  const openedAt = new Date();
+  const markOpened = await prisma.accessWindow.updateMany({
+    where: {
+      id: activeWindow.id,
+      openedAt: null,
+      isActive: true,
+      openFrom: { lte: openedAt },
+      openTo: { gte: openedAt },
+    },
+    data: { openedAt },
+  });
 
-  if (instruction?.message_id) {
-    session.sentTestMessageIds.push(instruction.message_id);
+  if (markOpened.count === 0) {
+    await ctx.answerCallbackQuery({
+      text: "Bu tugma allaqachon ishlatilgan.",
+      show_alert: true,
+    });
+    return;
+  }
+
+  session.activeTestId = testId;
+  session.activeWindowId = activeWindow.id;
+  session.sentTestMessageIds = [];
+
+  try {
+    if (activeWindow.test.images.length === 0) {
+      throw new Error("TEST_CONTENT_NOT_SET");
+    }
+
+    for (const image of activeWindow.test.images) {
+      const messageId = await sendTestImage(ctx, image.imageUrl);
+      if (messageId) session.sentTestMessageIds.push(messageId);
+    }
+
+    const instruction = await ctx.reply(
+      `Javoblarni bitta qatorda yuboring. Masalan: 1A2B3C...${activeWindow.test.totalQuestions}B`,
+      { reply_markup: studentMenuKeyboard, protect_content: true },
+    );
+
+    if (instruction?.message_id) {
+      session.sentTestMessageIds.push(instruction.message_id);
+    }
+  } catch (error) {
+    console.error("OPEN_TEST_SEND_ERROR", error);
+    await prisma.accessWindow.update({
+      where: { id: activeWindow.id },
+      data: { openedAt: null },
+    });
+    clearPendingGroupAccess(ctx.from.id, activeWindow.id);
+    const errorText =
+      error instanceof Error && error.message === "TEST_CONTENT_NOT_SET"
+        ? "Bu testga rasm biriktirilmagan. Admin 2 ta rasm URL ni to'ldirishi kerak."
+        : "Testni ochishda xatolik bo'ldi, qayta urinib ko'ring.";
+    await ctx.answerCallbackQuery({
+      text: errorText,
+      show_alert: true,
+    });
+    return;
   }
 
   state.set(ctx.from.id, session);

@@ -1,0 +1,6 @@
+aiogram==3.13.1
+asyncpg==0.29.0
+python-dotenv==1.0.1
+aiohttp==3.10.10
+pytest==8.3.3
+pytest-asyncio==0.24.0

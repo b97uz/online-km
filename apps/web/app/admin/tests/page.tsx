@@ -115,8 +115,18 @@ export default async function AdminTestsPage({
             placeholder="A,B,C,D,... (savollar soniga teng)"
             required
           />
-          <input name="imageUrl1" className="rounded border p-2" placeholder="1-bet rasm URL" required />
-          <input name="imageUrl2" className="rounded border p-2" placeholder="2-bet rasm URL" required />
+          <input
+            name="imageUrl1"
+            className="rounded border p-2"
+            placeholder="1-bet rasm URL"
+            required
+          />
+          <input
+            name="imageUrl2"
+            className="rounded border p-2"
+            placeholder="2-bet rasm URL"
+            required
+          />
           <button className="rounded bg-blue-600 p-2 text-white">Testni saqlash</button>
         </form>
       </section>
