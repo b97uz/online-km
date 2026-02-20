@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { parseCuratorWorkDays } from "@/lib/group-schedule";
 import { isUzE164, normalizeUzPhone } from "@/lib/phone";
 import { NextResponse } from "next/server";
+import { buildUrl } from "@/lib/url";
 
 function normalizeClock(value: string): string | null {
   const raw = value.trim();
@@ -33,19 +34,19 @@ export async function POST(req: Request) {
   const workDays = parseCuratorWorkDays(String(form.get("workDays") ?? ""));
 
   if (!fullName || !phone || !password || !workStart || !workEnd || !workDays) {
-    const errorUrl = new URL("/admin/curators", req.url);
+    const errorUrl = buildUrl("/admin/curators", req);
     errorUrl.searchParams.set("error", "Kurator ma'lumotlari to'liq emas");
     return NextResponse.redirect(errorUrl, 303);
   }
 
   if (!isUzE164(phone)) {
-    const errorUrl = new URL("/admin/curators", req.url);
+    const errorUrl = buildUrl("/admin/curators", req);
     errorUrl.searchParams.set("error", "Telefon +998XXXXXXXXX formatda bo'lishi kerak");
     return NextResponse.redirect(errorUrl, 303);
   }
 
   if (toMinutes(workStart) >= toMinutes(workEnd)) {
-    const errorUrl = new URL("/admin/curators", req.url);
+    const errorUrl = buildUrl("/admin/curators", req);
     errorUrl.searchParams.set("error", "Ish vaqti noto'g'ri: boshlanish tugashdan oldin bo'lishi kerak");
     return NextResponse.redirect(errorUrl, 303);
   }
@@ -79,12 +80,12 @@ export async function POST(req: Request) {
       },
     });
   } catch {
-    const errorUrl = new URL("/admin/curators", req.url);
+    const errorUrl = buildUrl("/admin/curators", req);
     errorUrl.searchParams.set("error", "Kurator yaratilmadi. Telefon band bo'lishi mumkin");
     return NextResponse.redirect(errorUrl, 303);
   }
 
-  const okUrl = new URL("/admin/curators", req.url);
+  const okUrl = buildUrl("/admin/curators", req);
   okUrl.searchParams.set("msg", "Kurator yaratildi");
   return NextResponse.redirect(okUrl, 303);
 }

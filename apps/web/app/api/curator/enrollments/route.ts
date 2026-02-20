@@ -1,8 +1,9 @@
 import { getSession } from "@/lib/auth";
+import { buildUrl } from "@/lib/url";
 import { NextResponse } from "next/server";
 
 function redirectCurator(req: Request, message: string, isError = false) {
-  const url = new URL("/curator/students", req.url);
+  const url = buildUrl("/curator/students", req);
   url.searchParams.set(isError ? "error" : "msg", message);
   return NextResponse.redirect(url, 303);
 }

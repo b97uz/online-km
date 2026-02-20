@@ -1,4 +1,5 @@
 import { InstitutionCatalogType, InstitutionType } from "@prisma/client";
+import { buildUrl } from "@/lib/url";
 
 export function isJsonRequest(req: Request): boolean {
   const ct = req.headers.get("content-type") ?? "";
@@ -37,7 +38,7 @@ export function locationsRedirect(
     error?: string;
   },
 ) {
-  const url = new URL("/admin/locations", req.url);
+  const url = buildUrl("/admin/locations", req);
   if (options.tab) url.searchParams.set("tab", options.tab);
   if (options.provinceId) url.searchParams.set("provinceId", options.provinceId);
   if (options.districtId) url.searchParams.set("districtId", options.districtId);

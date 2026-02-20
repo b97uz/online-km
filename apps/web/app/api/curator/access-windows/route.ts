@@ -2,10 +2,11 @@ import { Role } from "@prisma/client";
 import { prisma } from "@km/db";
 import { getSession } from "@/lib/auth";
 import { isUzE164, normalizeUzPhone, phoneVariants } from "@/lib/phone";
+import { buildUrl } from "@/lib/url";
 import { NextResponse } from "next/server";
 
 function redirectBack(req: Request, message: string, isError = false) {
-  const url = new URL("/curator/access-windows", req.url);
+  const url = buildUrl("/curator/access-windows", req);
   url.searchParams.set(isError ? "error" : "msg", message);
   return NextResponse.redirect(url, 303);
 }

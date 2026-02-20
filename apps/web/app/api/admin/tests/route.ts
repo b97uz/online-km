@@ -1,6 +1,7 @@
 import { prisma } from "@km/db";
 import { getSession } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { buildUrl } from "@/lib/url";
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -30,20 +31,20 @@ export async function POST(req: Request) {
     !Number.isFinite(totalQuestions) ||
     totalQuestions < 1
   ) {
-    const errorUrl = new URL("/admin/tests", req.url);
+    const errorUrl = buildUrl("/admin/tests", req);
     errorUrl.searchParams.set("error", "Test ma'lumotlari noto'g'ri");
     return NextResponse.redirect(errorUrl, 303);
   }
 
   if (answerKey.length !== totalQuestions) {
-    const errorUrl = new URL("/admin/tests", req.url);
+    const errorUrl = buildUrl("/admin/tests", req);
     errorUrl.searchParams.set("error", "Answer key soni savollar soniga teng bo'lishi kerak");
     return NextResponse.redirect(errorUrl, 303);
   }
 
   const book = await prisma.book.findUnique({ where: { id: bookId }, select: { id: true } });
   if (!book) {
-    const errorUrl = new URL("/admin/tests", req.url);
+    const errorUrl = buildUrl("/admin/tests", req);
     errorUrl.searchParams.set("error", "Kitob topilmadi");
     return NextResponse.redirect(errorUrl, 303);
   }
@@ -96,12 +97,12 @@ export async function POST(req: Request) {
       },
     });
 
-    const okUrl = new URL("/admin/tests", req.url);
+    const okUrl = buildUrl("/admin/tests", req);
     okUrl.searchParams.set("msg", "Test qo'shildi");
     return NextResponse.redirect(okUrl, 303);
   } catch (error) {
     console.error("ADMIN_TEST_CREATE_ERROR", error);
-    const errorUrl = new URL("/admin/tests", req.url);
+    const errorUrl = buildUrl("/admin/tests", req);
     errorUrl.searchParams.set("error", "Test qo'shilmadi");
     return NextResponse.redirect(errorUrl, 303);
   }

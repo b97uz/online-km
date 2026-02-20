@@ -2,9 +2,10 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@km/db";
 import { getSession } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { buildUrl } from "@/lib/url";
 
 function redirectBack(req: Request, message: string, isError = false) {
-  const url = new URL("/admin/settings", req.url);
+  const url = buildUrl("/admin/settings", req);
   url.searchParams.set(isError ? "error" : "msg", message);
   return NextResponse.redirect(url, 303);
 }

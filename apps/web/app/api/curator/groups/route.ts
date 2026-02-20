@@ -1,5 +1,6 @@
 import { prisma } from "@km/db";
 import { getSession } from "@/lib/auth";
+import { buildUrl } from "@/lib/url";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
   const session = await getSession();
   if (!session || session.role !== "CURATOR") return new NextResponse("Forbidden", { status: 403 });
 
-  const url = new URL("/curator/groups", req.url);
+  const url = buildUrl("/curator/groups", req);
   url.searchParams.set("error", "Guruhlar admin tomonidan yaratiladi va biriktiriladi");
   return NextResponse.redirect(url, 303);
 }

@@ -5,6 +5,7 @@ import { isUzE164, normalizeUzPhone, phoneVariants } from "@/lib/phone";
 import { parseInstitutionType } from "@/lib/locations";
 import { generateNextStudentId } from "@/lib/student-id";
 import { NextResponse } from "next/server";
+import { buildUrl } from "@/lib/url";
 
 function parseStudentStatus(value: string): StudentStatus {
   if (value === "PASSIVE") return StudentStatus.PAUSED;
@@ -56,7 +57,7 @@ function toBoolJson(req: Request): boolean {
 }
 
 function redirectAdmin(req: Request, message: string, isError = false) {
-  const url = new URL("/admin/students", req.url);
+  const url = buildUrl("/admin/students", req);
   url.searchParams.set(isError ? "error" : "msg", message);
   return NextResponse.redirect(url, 303);
 }

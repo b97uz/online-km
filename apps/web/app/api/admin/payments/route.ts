@@ -20,6 +20,7 @@ import {
   parseSubject,
 } from "@/lib/payments";
 import { NextResponse } from "next/server";
+import { buildUrl } from "@/lib/url";
 
 function parseSubjectFromGroupFan(value: string): "CHEMISTRY" | "BIOLOGY" | "BOTH" | null {
   const raw = value.trim().toLowerCase();
@@ -38,7 +39,7 @@ function isJson(req: Request): boolean {
 }
 
 function redirectAdmin(req: Request, message: string, isError = false) {
-  const url = new URL("/admin/payments", req.url);
+  const url = buildUrl("/admin/payments", req);
   url.searchParams.set(isError ? "error" : "msg", message);
   return NextResponse.redirect(url, 303);
 }

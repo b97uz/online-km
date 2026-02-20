@@ -3,6 +3,7 @@ import { prisma } from "@km/db";
 import { getSession } from "@/lib/auth";
 import { addOneMonthFromDateInput, buildPeriodNote, parseDateInput } from "@/lib/payment-debt";
 import { NextResponse } from "next/server";
+import { buildUrl } from "@/lib/url";
 
 function parseEnrollmentStatus(value: string): EnrollmentStatus {
   if (value === "TRIAL") return EnrollmentStatus.TRIAL;
@@ -34,7 +35,7 @@ function isJson(req: Request): boolean {
 }
 
 function redirectAdmin(req: Request, message: string, isError = false, redirectPath = "/admin/groups") {
-  const url = new URL(redirectPath, req.url);
+  const url = buildUrl(redirectPath, req);
   url.searchParams.set(isError ? "error" : "msg", message);
   return NextResponse.redirect(url, 303);
 }

@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { formatCuratorWorkDays, normalizeDays, parseCuratorWorkDays } from "@/lib/group-schedule";
 import { isUzE164, normalizeUzPhone } from "@/lib/phone";
 import { NextResponse } from "next/server";
+import { buildUrl } from "@/lib/url";
 
 function parseBool(value: string): boolean | null {
   const v = value.trim().toLowerCase();
@@ -44,7 +45,7 @@ function isJson(req: Request): boolean {
 }
 
 function redirectCurators(req: Request, message: string, isError = false) {
-  const url = new URL("/admin/curators", req.url);
+  const url = buildUrl("/admin/curators", req);
   url.searchParams.set(isError ? "error" : "msg", message);
   return NextResponse.redirect(url, 303);
 }

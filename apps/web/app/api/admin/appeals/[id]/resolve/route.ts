@@ -3,9 +3,10 @@ import { prisma } from "@km/db";
 import { getSession } from "@/lib/auth";
 import { parentReplyKeyboard, sendTelegramMessage, studentReplyKeyboard } from "@/lib/telegram-bot";
 import { NextResponse } from "next/server";
+import { buildUrl } from "@/lib/url";
 
 function redirectAppeals(req: Request, message: string, isError = false) {
-  const url = new URL("/admin/appeals", req.url);
+  const url = buildUrl("/admin/appeals", req);
   url.searchParams.set(isError ? "error" : "msg", message);
   return NextResponse.redirect(url, 303);
 }

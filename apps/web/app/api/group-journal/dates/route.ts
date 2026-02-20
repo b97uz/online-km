@@ -6,6 +6,7 @@ import {
   parseDateOnlyUtc,
   startOfTodayUtc,
 } from "@/lib/group-journal";
+import { buildUrl } from "@/lib/url";
 import { NextResponse } from "next/server";
 
 function isJson(req: Request): boolean {
@@ -21,7 +22,7 @@ function getRedirectPath(raw: string, role: "ADMIN" | "CURATOR"): string {
 }
 
 function redirectTo(req: Request, path: string, message: string, isError = false) {
-  const url = new URL(path, req.url);
+  const url = buildUrl(path, req);
   url.searchParams.set(isError ? "error" : "msg", message);
   return NextResponse.redirect(url, 303);
 }

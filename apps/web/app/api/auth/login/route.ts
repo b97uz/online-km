@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "@km/db";
 import { signSession, setSessionCookie } from "@/lib/auth";
+import { buildUrl } from "@/lib/url";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
@@ -9,7 +10,7 @@ export async function POST(req: Request) {
   const password = String(form.get("password") ?? "");
   const adminUsernameFallback = process.env.ADMIN_USERNAME ?? "admin";
 
-  if (!password) return NextResponse.redirect(new URL("/login?error=1", req.url), 303);
+  if (!password) return NextResponse.redirect(buildUrl("/login?error=1", req), 303);
 
   let user = null;
 
@@ -31,10 +32,10 @@ export async function POST(req: Request) {
     });
   }
 
-  if (!user?.passwordHash) return NextResponse.redirect(new URL("/login?error=1", req.url), 303);
+  if (!user?.passwordHash) return NextResponse.redirect(buildUrl("/login?error=1", req), 303);
 
   const isValid = await bcrypt.compare(password, user.passwordHash);
-  if (!isValid) return NextResponse.redirect(new URL("/login?error=1", req.url), 303);
+  if (!isValid) return NextResponse.redirect(buildUrl("/login?error=1", req), 303);
 
   const token = signSession({
     userId: user.id,
@@ -47,5 +48,5 @@ export async function POST(req: Request) {
     data: { actorId: user.id, action: "LOGIN", entity: "User", entityId: user.id },
   });
 
-  return NextResponse.redirect(new URL(user.role === "ADMIN" ? "/admin" : "/curator", req.url), 303);
+  return NextResponse.redirect(buildUrl(user.role === "ADMIN" ? "/admin" : "/curator", req), 303);
 }

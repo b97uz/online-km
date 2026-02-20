@@ -8,6 +8,7 @@ import {
 } from "@/lib/location-excel-import";
 import { isJsonRequest } from "@/lib/locations";
 import { NextResponse } from "next/server";
+import { buildUrl } from "@/lib/url";
 
 function toImportType(value: string): LocationImportType | null {
   if (value === "SCHOOL") return "SCHOOL";
@@ -16,7 +17,7 @@ function toImportType(value: string): LocationImportType | null {
 }
 
 function redirectWithMessage(req: Request, message: string, isError = false) {
-  const url = new URL("/admin/locations/excel-import", req.url);
+  const url = buildUrl("/admin/locations/excel-import", req);
   url.searchParams.set(isError ? "error" : "msg", message);
   return NextResponse.redirect(url, 303);
 }

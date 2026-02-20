@@ -10,6 +10,7 @@ import {
   validateCuratorTimeConstraints,
 } from "@/lib/group-schedule";
 import { NextResponse } from "next/server";
+import { buildUrl } from "@/lib/url";
 
 type GroupFan = "Kimyo" | "Biologiya";
 
@@ -39,7 +40,7 @@ function isJson(req: Request): boolean {
 }
 
 function redirectAdmin(req: Request, message: string, isError = false) {
-  const url = new URL("/admin/groups", req.url);
+  const url = buildUrl("/admin/groups", req);
   url.searchParams.set(isError ? "error" : "msg", message);
   return NextResponse.redirect(url, 303);
 }
