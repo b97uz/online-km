@@ -3,7 +3,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ -f .env ]; then
-  cp .env apps/bot/.env
   cp .env packages/db/.env
   set -a
   source .env
@@ -27,5 +26,12 @@ if [ -n "$PG_ISREADY_BIN" ]; then
   fi
 fi
 
-cd apps/bot
-npm exec -- tsx watch src/index.ts
+cd python-aiogram
+
+if [ ! -d .venv ]; then
+  echo "Python venv topilmadi. Yaratilmoqda..."
+  python3 -m venv .venv
+  .venv/bin/pip install -r requirements.txt
+fi
+
+.venv/bin/python main.py

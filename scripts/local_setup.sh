@@ -8,7 +8,6 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 cp .env apps/web/.env.local
-cp .env apps/bot/.env
 cp .env packages/db/.env
 
 set -a
@@ -50,9 +49,18 @@ createdb kelajak_mediklari 2>/dev/null || true
 echo "[8/9] Running migration"
 npx -y pnpm@9.15.0 --filter @km/db exec prisma migrate dev --name init
 
-echo "[9/9] Seeding admin"
+echo "[9/10] Seeding admin"
 npx -y pnpm@9.15.0 db:seed
 
+echo "[10/10] Setting up Python bot (aiogram)"
+cd python-aiogram
+if [ ! -d .venv ]; then
+  python3 -m venv .venv
+fi
+.venv/bin/pip install -r requirements.txt
+cd ..
+
+echo ""
 echo "Setup completed successfully."
-echo "Now run web:   bash scripts/local_run_web.sh"
-echo "Then run bot:  bash scripts/local_run_bot.sh"
+echo "Now run web (terminal 1):  bash scripts/local_run_web.sh"
+echo "Then run bot (terminal 2): bash scripts/local_run_bot.sh"

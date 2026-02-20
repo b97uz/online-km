@@ -1,0 +1,17 @@
+node_modules
+.next
+dist
+.venv
+__pycache__
+*.pyc
+.env
+.env.*
+!.env.example
+.git
+.DS_Store
+coverage
+python-aiogram/.venv
+python-aiogram/__pycache__
+python-aiogram/tests
+apps/web/public/uploads/*
+!apps/web/public/uploads/.gitkeep

@@ -1,0 +1,14 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY python-aiogram/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY python-aiogram/ .
+
+ENV NODE_ENV=production
+
+EXPOSE 4000
+
+CMD ["python", "main.py"]

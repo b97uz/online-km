@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kelajak_mediklari
+      POSTGRES_USER: km_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-strong_password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U km_user -d kelajak_mediklari"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      target: builder
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://km_user:${POSTGRES_PASSWORD:-strong_password}@postgres:5432/kelajak_mediklari
+    working_dir: /app
+    entrypoint: ["sh", "-c", "npx pnpm@9.15.0 --filter @km/db exec prisma migrate deploy && npx pnpm@9.15.0 --filter @km/db db:seed"]
+    profiles:
+      - setup
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://km_user:${POSTGRES_PASSWORD:-strong_password}@postgres:5432/kelajak_mediklari
+      JWT_SECRET: ${JWT_SECRET}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+      NODE_ENV: production
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe123!}
+    volumes:
+      - uploads:/app/apps/web/public/uploads
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgresql://km_user:${POSTGRES_PASSWORD:-strong_password}@postgres:5432/kelajak_mediklari
+      BOT_TOKEN: ${BOT_TOKEN}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+      BOT_WEBHOOK_URL: ${BOT_WEBHOOK_URL:-}
+      BOT_WEBHOOK_PATH: ${BOT_WEBHOOK_PATH:-}
+      BOT_PORT: "4000"
+      NODE_ENV: production
+      ALLOW_PARTIAL_SUBMISSIONS: ${ALLOW_PARTIAL_SUBMISSIONS:-false}
+      PAYME_URL_TEMPLATE: ${PAYME_URL_TEMPLATE:-}
+      CLICK_URL_TEMPLATE: ${CLICK_URL_TEMPLATE:-}
+      UZUM_URL_TEMPLATE: ${UZUM_URL_TEMPLATE:-}
+      PAYNET_URL_TEMPLATE: ${PAYNET_URL_TEMPLATE:-}
+      PAYMENT_CALLBACK_BASE_URL: ${PAYMENT_CALLBACK_BASE_URL:-}
+      ALLOW_MOCK_PAYMENT_LINKS: ${ALLOW_MOCK_PAYMENT_LINKS:-true}
+
+volumes:
+  pgdata:
+  uploads:

@@ -5,7 +5,21 @@ coverage
 .env
 .env.*
 !.env.example
+!.env.docker
 pnpm-lock.yaml
 uploads
 apps/web/public/uploads/*
 !apps/web/public/uploads/.gitkeep
+
+# Python
+.venv
+__pycache__
+*.pyc
+*.pyo
+
+# Docker
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
