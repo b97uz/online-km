@@ -40,11 +40,11 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "3007:3000"
     environment:
       DATABASE_URL: postgresql://km_user:${POSTGRES_PASSWORD:-strong_password}@postgres:5432/kelajak_mediklari
       JWT_SECRET: ${JWT_SECRET}
-      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3007}
       NODE_ENV: production
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe123!}
