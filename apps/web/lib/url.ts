@@ -1,22 +1,19 @@
 /**
- * Builds an absolute redirect URL that a **browser** can actually follow.
+ * Builds a redirect URL from the browser's own origin so the user
+ * stays on whatever address they typed (localhost, domain, IP, etc.).
  *
- * Inside Docker the internal host is 0.0.0.0 which is meaningless to a
- * browser, so we must derive the real origin from trusted sources:
- *
- *  1. X-Forwarded-Proto / X-Forwarded-Host  (nginx sets these)
- *  2. WEB_BASE_URL env var                   (docker-compose sets this)
- *
- * We intentionally never fall back to req.url because inside Docker it
- * always contains http://0.0.0.0:3000 which causes ERR_SSL_PROTOCOL_ERROR
- * when Chrome upgrades the scheme to https.
+ * The Host header is set by the browser and always matches the address bar.
+ * Inside Docker req.url is http://0.0.0.0:3000 but Host is still correct.
  */
 export function buildUrl(path: string, req: Request): URL {
-  const fwdProto = first(req.headers.get("x-forwarded-proto"));
-  const fwdHost = first(req.headers.get("x-forwarded-host"));
+  const proto =
+    first(req.headers.get("x-forwarded-proto")) || "http";
+  const host =
+    first(req.headers.get("x-forwarded-host")) ||
+    first(req.headers.get("host"));
 
-  if (fwdProto && fwdHost) {
-    return new URL(path, `${fwdProto}://${fwdHost}`);
+  if (host) {
+    return new URL(path, `${proto}://${host}`);
   }
 
   const base = process.env.WEB_BASE_URL;
@@ -24,12 +21,6 @@ export function buildUrl(path: string, req: Request): URL {
     return new URL(path, base);
   }
 
-  // Should never reach here in production -- log a warning so it's visible.
-  console.warn(
-    "[buildUrl] No X-Forwarded-Host and no WEB_BASE_URL. " +
-      "Falling back to request URL:",
-    req.url,
-  );
   return new URL(path, req.url);
 }
 
