@@ -44,7 +44,7 @@ services:
     environment:
       DATABASE_URL: postgresql://km_user:${POSTGRES_PASSWORD:-strong_password}@postgres:5432/kelajak_mediklari
       JWT_SECRET: ${JWT_SECRET}
-      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3007}
+      WEB_BASE_URL: ${WEB_BASE_URL:?Set WEB_BASE_URL in .env (e.g. https://online.kelajakmediklari.uz)}
       NODE_ENV: production
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe123!}
@@ -64,7 +64,7 @@ services:
     environment:
       DATABASE_URL: postgresql://km_user:${POSTGRES_PASSWORD:-strong_password}@postgres:5432/kelajak_mediklari
       BOT_TOKEN: ${BOT_TOKEN}
-      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+      WEB_BASE_URL: ${WEB_BASE_URL:?Set WEB_BASE_URL in .env (e.g. https://online.kelajakmediklari.uz)}
       BOT_WEBHOOK_URL: ${BOT_WEBHOOK_URL:-}
       BOT_WEBHOOK_PATH: ${BOT_WEBHOOK_PATH:-}
       BOT_PORT: "4000"
